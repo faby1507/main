@@ -163,7 +163,7 @@ function showNextRole() {
     title.textContent = `Giocatore: ${players[currentRoleIdx]}`;
     btn.onclick = function() {
       let role = roles[currentRoleIdx];
-      let word = role === "Undercover" ? undercoverWord : (role === "Mister White" ? "???" : civilWord);
+      let word = role === "Undercover" ? undercoverWord : (role === "Mister White" ? "Sei MR White" : civilWord);
       area.innerHTML = `<span style="font-size:1.3rem;">Il tuo ruolo: <b>${role}</b><br>${role === "Mister White" ? "Parola: ???" : "Parola: <b>" + word + "</b>"}</span>`;
       btn.textContent = currentRoleIdx === players.length - 1 ? "Inizia la partita" : "Passa al prossimo";
       btn.onclick = function() {
