@@ -148,38 +148,47 @@ function startRoleReveal() {
   currentRoleIdx = 0;
   document.getElementById("gameArea").style.display = "none";
   document.getElementById("showRoleBox").style.display = "block";
-  showNextRole();
+  showNextWord();
 }
 
-function showNextRole() {
+function showNextWord() {
   const title = document.getElementById("showRoleTitle");
   const area = document.getElementById("roleRevealArea");
   const btn = document.getElementById("showRoleBtn");
   area.textContent = "";
-  btn.textContent = "Mostra il mio ruolo";
+  btn.textContent = "Mostra la mia parola";
   btn.disabled = false;
 
   if (currentRoleIdx < players.length) {
     title.textContent = `Giocatore: ${players[currentRoleIdx]}`;
     btn.onclick = function() {
       let role = roles[currentRoleIdx];
-      let word = role === "Undercover" ? undercoverWord : (role === "Mister White" ? "Sei MR White" : civilWord);
-      area.innerHTML = `<span style="font-size:1.3rem;">Il tuo ruolo: <b>${role}</b><br>${role === "Mister White" ? "Parola: ???" : "Parola: <b>" + word + "</b>"}</span>`;
-      btn.textContent = currentRoleIdx === players.length - 1 ? "Inizia la partita" : "Passa al prossimo";
+      let word = role === "Undercover" ? undercoverWord : (role === "Mister White" ? "???" : civilWord);
+      area.innerHTML = `<span style="font-size:1.3rem;">La tua parola: <b>${word}</b></span>`;
+      btn.textContent = currentRoleIdx === players.length - 1 ? "Procedi al voto" : "Passa al prossimo";
       btn.onclick = function() {
         currentRoleIdx++;
-        showNextRole();
+        showNextWord();
       };
     };
   } else {
-    // Tutti hanno visto il ruolo, mostra chi inizia
+    // Tutti hanno visto la parola, scegli chi inizia (escludendo Mister White)
     document.getElementById("showRoleBox").style.display = "none";
     document.getElementById("gameArea").style.display = "block";
-    renderPlayerList();
-    // Mostra chi inizia
+    document.getElementById("playerRoles").style.display = "none";
+    document.getElementById("toggleRolesBtn").style.display = "none";
+    document.getElementById("voteBtn").style.display = "none";
+    // Scegli casualmente chi inizia tra chi NON è Mister White
+    let possibili = players.map((_, i) => i).filter(i => roles[i] !== "Mister White");
+    primoGiocatoreIdx = possibili[Math.floor(Math.random() * possibili.length)];
     const starterName = players[primoGiocatoreIdx];
-    document.getElementById("resultArea").textContent = `Inizia: ${starterName}`;
+    document.getElementById("resultArea").innerHTML = `<b>Inizia:</b> ${starterName}<br>Descrivi la tua parola!<br><br><button id="proseguiAlVotoBtn">Prosegui al voto</button>`;
     document.getElementById("resultArea").style.display = "block";
+    // Mostra il bottone per passare al voto solo dopo la descrizione
+    document.getElementById("proseguiAlVotoBtn").onclick = function() {
+      document.getElementById("resultArea").style.display = "none";
+      document.getElementById("voteBtn").style.display = "inline-block";
+    };
   }
 }
 
@@ -355,6 +364,7 @@ function showNextRole() {
           if (restanti.length === 1 && restanti[0] === "Mister White") {
             document.getElementById("resultArea").textContent = "Ha vinto Mr White!";
             document.getElementById("resultArea").style.display = "block";
+            showRestartButtons();
             return;
           }
 
@@ -369,6 +379,7 @@ function showNextRole() {
               "<b>Parola Civili:</b> " + civilWord + "<br>" +
               "<b>Parola Undercover:</b> " + undercoverWord;
             document.getElementById("resultArea").style.display = "block";
+            showRestartButtons();
             return;
           }
           // Se resta solo un undercover senza civili, vince lui
@@ -378,6 +389,18 @@ function showNextRole() {
               "<b>Parola Civili:</b> " + civilWord + "<br>" +
               "<b>Parola Undercover:</b> " + undercoverWord;
             document.getElementById("resultArea").style.display = "block";
+            showRestartButtons();
+            return;
+          }
+          // Se vengono eliminati tutti i civili, vince Mister White e si ricomincia
+          if (civilCount === 0 && misterWhiteCount > 0) {
+            document.getElementById("resultArea").innerHTML =
+              "Tutti i civili sono stati eliminati!<br><br>" +
+              "Ha vinto Mister White!<br><br>" +
+              "<b>Parola Civili:</b> " + civilWord + "<br>" +
+              "<b>Parola Undercover:</b> " + undercoverWord;
+            document.getElementById("resultArea").style.display = "block";
+            showRestartButtons();
             return;
           }
           // --- FINE AGGIUNTA ---
@@ -387,8 +410,24 @@ function showNextRole() {
             document.getElementById("resultArea").textContent = "Un civile è stato eliminato.";
             document.getElementById("resultArea").style.display = "block";
           } else if (role === "Undercover") {
-            document.getElementById("resultArea").textContent = "Un undercover è stato eliminato.";
-            document.getElementById("resultArea").style.display = "block";
+            // Controlla se Mister White è già stato eliminato (e ha già giocato il suo turno)
+            const misterWhiteEliminato = players.some((_, i) => roles[i] === "Mister White" && eliminated.includes(i));
+            if (misterWhiteEliminato) {
+              // Se Mister White è stato eliminato, la partita termina subito
+              document.getElementById("resultArea").innerHTML =
+                "L'Undercover è stato eliminato!<br><br>" +
+                "La partita è terminata.<br><br>" +
+                "<b>Parola Civili:</b> " + civilWord + "<br>" +
+                "<b>Parola Undercover:</b> " + undercoverWord;
+              document.getElementById("resultArea").style.display = "block";
+              showRestartButtons();
+              return;
+            } else {
+              // Altrimenti, solo mostra che è stato eliminato (la partita continua finché Mister White non viene eliminato e gioca il suo turno)
+              document.getElementById("resultArea").textContent = "Un undercover è stato eliminato.";
+              document.getElementById("resultArea").style.display = "block";
+            }
+            return;
           } else if (role === "Mister White") {
             // Mister White deve indovinare la parola
             document.getElementById("resultArea").innerHTML = `
@@ -400,26 +439,118 @@ function showNextRole() {
             document.getElementById("resultArea").style.display = "block";
             document.getElementById("submitGuess").onclick = function() {
               const guess = document.getElementById("whiteGuess").value.trim().toLowerCase();
-              if (guess === civilWord.toLowerCase()) {
-                document.getElementById("resultArea").innerHTML = 
-                  "Ha vinto Mr White!<br><br>" +
-                  "<b>Parola Civili:</b> " + civilWord + "<br>" +
-                  "<b>Parola Undercover:</b> " + undercoverWord;
+              const target = civilWord.toLowerCase();
+              // Calcolo percentuale di match
+              function similarity(a, b) {
+                let matches = 0;
+                for (let i = 0; i < Math.min(a.length, b.length); i++) {
+                  if (a[i] === b[i]) matches++;
+                }
+                return matches / b.length;
+              }
+              const perc = similarity(guess, target);
+
+              // Stato attuale dei giocatori
+              const inGioco = players.map((_, i) => i).filter(i => !eliminated.includes(i));
+              const undercoverCount = inGioco.filter(i => roles[i] === "Undercover").length;
+              const civilCount = inGioco.filter(i => roles[i] === "Civile").length;
+              const misterWhiteCount = inGioco.filter(i => roles[i] === "Mister White").length;
+
+              if (perc >= 0.7) {
+                // Mister White ha vinto
+                // Se Undercover è ancora in gioco, vincono entrambi
+                if (undercoverCount > 0) {
+                  document.getElementById("resultArea").innerHTML =
+                    "Ha vinto Mr White e anche l'Undercover!<br><br>" +
+                    "<b>Parola Civili:</b> " + civilWord + "<br>" +
+                    "<b>Parola Undercover:</b> " + undercoverWord;
+                } else {
+                  document.getElementById("resultArea").innerHTML =
+                    "Ha vinto Mr White!<br><br>" +
+                    "<b>Parola Civili:</b> " + civilWord + "<br>" +
+                    "<b>Parola Undercover:</b> " + undercoverWord;
+                }
+                showRestartButtons();
               } else {
-                document.getElementById("resultArea").innerHTML = 
-                  "Mister White ha fallito! Il gioco ricomincia.<br><br>" +
-                  "<b>Parola Civili:</b> " + civilWord + "<br>" +
-                  "<b>Parola Undercover:</b> " + undercoverWord;
-                setTimeout(() => {
-                  location.reload();
-                }, 2000);
+                // Mister White ha fallito
+                if (undercoverCount === 0) {
+                  // Undercover già eliminato: partita finita
+                  document.getElementById("resultArea").innerHTML =
+                    "Mister White ha fallito!<br><br>" +
+                    "La partita è terminata.<br><br>" +
+                    "<b>Parola Civili:</b> " + civilWord + "<br>" +
+                    "<b>Parola Undercover:</b> " + undercoverWord;
+                  showRestartButtons();
+                } else {
+                  // La partita continua finché non viene eliminato l'Undercover o vince lui
+                  document.getElementById("resultArea").innerHTML =
+                    "Mister White ha fallito! Il gioco continua finché non viene eliminato l'Undercover o se vince lui.";
+                  setTimeout(() => {
+                    document.getElementById("resultArea").style.display = "none";
+                    document.getElementById("voteBtn").style.display = "inline-block";
+                  }, 2000);
+                }
               }
             };
+            return;
           }
         });
         voteArea.appendChild(btn);
       });
     });
+
+    // Funzione per mostrare i pulsanti di restart
+function showRestartButtons() {
+  const resultArea = document.getElementById("resultArea");
+  const btnRestart = document.createElement("button");
+  btnRestart.textContent = "Rigioca con stessi giocatori";
+  btnRestart.style.margin = "1rem 0.5rem 0 0";
+  btnRestart.onclick = function() {
+    // Reset variabili di gioco ma NON i giocatori
+    eliminated = [];
+    // Riassegna ruoli e parole e riparti dal reveal
+    // --- scegli solo tra le coppie non uscite ---
+    const availablePairs = getAvailablePairs();
+    if (availablePairs.length === 0) {
+      alert("Tutte le coppie di parole sono già uscite! Premi il pulsante di reset per ricominciare.");
+      location.reload();
+      return;
+    }
+    [civilWord, undercoverWord] = availablePairs[Math.floor(Math.random() * availablePairs.length)];
+    saveUsedPair([civilWord, undercoverWord]);
+    // --- FINE MODIFICA ---
+    // Riassegna ruoli
+    const numUndercover = roles.filter(r => r === "Undercover").length;
+    const includeWhite = roles.includes("Mister White");
+    roles = Array(players.length).fill("Civile");
+    for (let i = 0; i < numUndercover; i++) roles[i] = "Undercover";
+    if (includeWhite) roles[numUndercover] = "Mister White";
+    shuffle(roles);
+    // Scegli il primo giocatore (non Mister White)
+    let possibili = players.map((_, i) => i).filter(i => roles[i] !== "Mister White");
+    primoGiocatoreIdx = possibili[Math.floor(Math.random() * possibili.length)];
+    // Nascondi tutto e riparti dal reveal
+    document.getElementById("voteArea").style.display = "none";
+    document.getElementById("resultArea").style.display = "none";
+    document.getElementById("gameArea").style.display = "none";
+    startRoleReveal();
+  };
+
+  const btnNew = document.createElement("button");
+  btnNew.textContent = "Nuova partita";
+  btnNew.style.margin = "1rem 0 0 0.5rem";
+  btnNew.onclick = function() {
+    location.reload();
+  };
+
+  // Rimuovi eventuali bottoni già presenti
+  Array.from(resultArea.querySelectorAll("button")).forEach(b => b.remove());
+  resultArea.appendChild(document.createElement("br"));
+  resultArea.appendChild(btnRestart);
+  resultArea.appendChild(btnNew);
+}
+
+// ...ripeti per tutti i punti di vittoria...
   </script>
 </body>
 </html>
