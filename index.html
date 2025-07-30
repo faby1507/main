@@ -72,6 +72,13 @@
     <button type="submit">Inizia Partita</button>
   </form>
 
+  <!-- MODIFICA: Box per mostrare i ruoli uno alla volta -->
+  <div id="showRoleBox" style="display:none; max-width:500px; margin:2rem auto; text-align:center; background:#f7f7f7; border-radius:10px; padding:2rem;">
+    <h2 id="showRoleTitle"></h2>
+    <div id="roleRevealArea" style="margin:1rem 0;"></div>
+    <button id="showRoleBtn" style="margin-top:1rem;">Mostra il mio ruolo</button>
+  </div>
+
   <div class="game-area" id="gameArea" style="display:none;">
     <h2>Ruoli assegnati</h2>
     <button id="toggleRolesBtn" type="button">Nascondi Ruoli</button>
@@ -92,12 +99,40 @@
       ["calippo", "polaretti"]
     ];
 
-    function shuffle(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-      }
+    // Funzione per ottenere le coppie già uscite da localStorage
+    function getUsedPairs() {
+      const used = localStorage.getItem("usedWordPairs");
+      return used ? JSON.parse(used) : [];
     }
+
+    // Funzione per salvare una nuova coppia uscita
+    function saveUsedPair(pair) {
+      const used = getUsedPairs();
+      used.push(pair);
+      localStorage.setItem("usedWordPairs", JSON.stringify(used));
+    }
+
+    // Funzione per filtrare le coppie già uscite
+    function getAvailablePairs() {
+      const used = getUsedPairs();
+      return wordPairs.filter(pair =>
+        !used.some(usedPair =>
+          (usedPair[0] === pair[0] && usedPair[1] === pair[1]) ||
+          (usedPair[0] === pair[1] && usedPair[1] === pair[0])
+        )
+      );
+    }
+
+    // Pulsante per azzerare le coppie uscite (opzionale)
+    // Puoi aggiungere questo bottone dove vuoi nell'HTML:
+    // <button id="resetPairsBtn" type="button">Reset parole uscite</button>
+    // E questo codice JS:
+    /*
+    document.getElementById("resetPairsBtn").onclick = function() {
+      localStorage.removeItem("usedWordPairs");
+      alert("Parole uscite azzerate!");
+    };
+    */
 
     let players = [];
 let roles = [];
@@ -106,93 +141,144 @@ let undercoverWord = "";
 let eliminated = []; // Array per tenere traccia degli eliminati
 let primoGiocatoreIdx = null;
 
-function renderPlayerList() {
-  const list = document.getElementById("playerRoles");
-  list.innerHTML = "";
+// MODIFICA: Variabili per la visualizzazione dei ruoli uno alla volta
+let currentRoleIdx = 0;
 
-  // Mostra il primo giocatore in alto
-  if (primoGiocatoreIdx !== null && !eliminated.includes(primoGiocatoreIdx)) {
-    const name = players[primoGiocatoreIdx];
-    const li = document.createElement("li");
-    li.style.display = "flex";
-    li.style.alignItems = "center";
-    li.style.justifyContent = "space-between";
-    li.style.background = "#e6f7ff";
-    li.style.fontWeight = "bold";
-
-    const nameSpan = document.createElement("span");
-    nameSpan.textContent = `Primo a iniziare: ${name}`;
-
-    const roleSpan = document.createElement("span");
-    if (roles[primoGiocatoreIdx] === "Mister White") {
-      roleSpan.textContent = "???";
-    } else {
-      roleSpan.textContent = roles[primoGiocatoreIdx] === "Undercover" ? undercoverWord : civilWord;
-    }
-    roleSpan.style.display = "none";
-    roleSpan.style.marginLeft = "1rem";
-
-    const btn = document.createElement("button");
-    btn.textContent = "Mostra ruolo";
-    btn.style.width = "auto";
-    btn.style.marginLeft = "1rem";
-    btn.addEventListener("click", function() {
-      if (roleSpan.style.display === "none") {
-        roleSpan.style.display = "inline";
-        btn.textContent = "Nascondi ruolo";
-      } else {
-        roleSpan.style.display = "none";
-        btn.textContent = "Mostra ruolo";
-      }
-    });
-
-    li.appendChild(nameSpan);
-    li.appendChild(btn);
-    li.appendChild(roleSpan);
-    list.appendChild(li);
-  }
-
-  // Mostra gli altri giocatori nell’ordine, saltando il primo e gli eliminati
-  players.forEach((name, index) => {
-    if (index === primoGiocatoreIdx || eliminated.includes(index)) return;
-    let word = roles[index] === "Undercover" ? undercoverWord : (roles[index] === "Mister White" ? "???" : civilWord);
-    const li = document.createElement("li");
-    li.style.display = "flex";
-    li.style.alignItems = "center";
-    li.style.justifyContent = "space-between";
-
-    const nameSpan = document.createElement("span");
-    nameSpan.textContent = name;
-
-    const roleSpan = document.createElement("span");
-    if (roles[index] === "Mister White") {
-      roleSpan.textContent = "???";
-    } else {
-      roleSpan.textContent = word;
-    }
-    roleSpan.style.display = "none";
-    roleSpan.style.marginLeft = "1rem";
-
-    const btn = document.createElement("button");
-    btn.textContent = "Mostra ruolo";
-    btn.style.width = "auto";
-    btn.style.marginLeft = "1rem";
-    btn.addEventListener("click", function() {
-      if (roleSpan.style.display === "none") {
-        roleSpan.style.display = "inline";
-        btn.textContent = "Nascondi ruolo";
-      } else {
-        roleSpan.style.display = "none";
-        btn.textContent = "Mostra ruolo";
-      }
-    });
-
-    li.appendChild(nameSpan);
-    li.appendChild(btn);
-    li.appendChild(roleSpan);
-    list.appendChild(li);
-  });
+function startRoleReveal() {
+  currentRoleIdx = 0;
+  document.getElementById("gameArea").style.display = "none";
+  document.getElementById("showRoleBox").style.display = "block";
+  showNextRole();
 }
+
+function showNextRole() {
+  const title = document.getElementById("showRoleTitle");
+  const area = document.getElementById("roleRevealArea");
+  const btn = document.getElementById("showRoleBtn");
+  area.textContent = "";
+  btn.textContent = "Mostra il mio ruolo";
+  btn.disabled = false;
+
+  if (currentRoleIdx < players.length) {
+    title.textContent = `Giocatore: ${players[currentRoleIdx]}`;
+    btn.onclick = function() {
+      let role = roles[currentRoleIdx];
+      let word = role === "Undercover" ? undercoverWord : (role === "Mister White" ? "???" : civilWord);
+      area.innerHTML = `<span style="font-size:1.3rem;">Il tuo ruolo: <b>${role}</b><br>${role === "Mister White" ? "Parola: ???" : "Parola: <b>" + word + "</b>"}</span>`;
+      btn.textContent = currentRoleIdx === players.length - 1 ? "Inizia la partita" : "Passa al prossimo";
+      btn.onclick = function() {
+        currentRoleIdx++;
+        showNextRole();
+      };
+    };
+  } else {
+    // Tutti hanno visto il ruolo, mostra chi inizia
+    document.getElementById("showRoleBox").style.display = "none";
+    document.getElementById("gameArea").style.display = "block";
+    renderPlayerList();
+    // Mostra chi inizia
+    const starterName = players[primoGiocatoreIdx];
+    document.getElementById("resultArea").textContent = `Inizia: ${starterName}`;
+    document.getElementById("resultArea").style.display = "block";
+  }
+}
+
+    // Funzione per rendere casuali gli elementi di un array
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    // Funzione per aggiornare la lista dei giocatori e ruoli
+    function renderPlayerList() {
+      const list = document.getElementById("playerRoles");
+      list.innerHTML = "";
+
+      // Mostra il primo giocatore in alto
+      if (primoGiocatoreIdx !== null && !eliminated.includes(primoGiocatoreIdx)) {
+        const name = players[primoGiocatoreIdx];
+        const li = document.createElement("li");
+        li.style.display = "flex";
+        li.style.alignItems = "center";
+        li.style.justifyContent = "space-between";
+        li.style.background = "#e6f7ff";
+        li.style.fontWeight = "bold";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = `Primo a iniziare: ${name}`;
+
+        const roleSpan = document.createElement("span");
+        if (roles[primoGiocatoreIdx] === "Mister White") {
+          roleSpan.textContent = "???";
+        } else {
+          roleSpan.textContent = roles[primoGiocatoreIdx] === "Undercover" ? undercoverWord : civilWord;
+        }
+        roleSpan.style.display = "none";
+        roleSpan.style.marginLeft = "1rem";
+
+        const btn = document.createElement("button");
+        btn.textContent = "Mostra ruolo";
+        btn.style.width = "auto";
+        btn.style.marginLeft = "1rem";
+        btn.addEventListener("click", function() {
+          if (roleSpan.style.display === "none") {
+            roleSpan.style.display = "inline";
+            btn.textContent = "Nascondi ruolo";
+          } else {
+            roleSpan.style.display = "none";
+            btn.textContent = "Mostra ruolo";
+          }
+        });
+
+        li.appendChild(nameSpan);
+        li.appendChild(btn);
+        li.appendChild(roleSpan);
+        list.appendChild(li);
+      }
+
+      // Mostra gli altri giocatori nell’ordine, saltando il primo e gli eliminati
+      players.forEach((name, index) => {
+        if (index === primoGiocatoreIdx || eliminated.includes(index)) return;
+        let word = roles[index] === "Undercover" ? undercoverWord : (roles[index] === "Mister White" ? "???" : civilWord);
+        const li = document.createElement("li");
+        li.style.display = "flex";
+        li.style.alignItems = "center";
+        li.style.justifyContent = "space-between";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = name;
+
+        const roleSpan = document.createElement("span");
+        if (roles[index] === "Mister White") {
+          roleSpan.textContent = "???";
+        } else {
+          roleSpan.textContent = word;
+        }
+        roleSpan.style.display = "none";
+        roleSpan.style.marginLeft = "1rem";
+
+        const btn = document.createElement("button");
+        btn.textContent = "Mostra ruolo";
+        btn.style.width = "auto";
+        btn.style.marginLeft = "1rem";
+        btn.addEventListener("click", function() {
+          if (roleSpan.style.display === "none") {
+            roleSpan.style.display = "inline";
+            btn.textContent = "Nascondi ruolo";
+          } else {
+            roleSpan.style.display = "none";
+            btn.textContent = "Mostra ruolo";
+          }
+        });
+
+        li.appendChild(nameSpan);
+        li.appendChild(btn);
+        li.appendChild(roleSpan);
+        list.appendChild(li);
+      });
+    }
 
     document.getElementById("setupForm").addEventListener("submit", function(e) {
       e.preventDefault();
@@ -208,7 +294,15 @@ function renderPlayerList() {
       players = playerLines.map(name => name.trim()).filter(name => name);
       shuffle(players);
 
-      [civilWord, undercoverWord] = wordPairs[Math.floor(Math.random() * wordPairs.length)];
+      // --- MODIFICA QUI: scegli solo tra le coppie non uscite ---
+      const availablePairs = getAvailablePairs();
+      if (availablePairs.length === 0) {
+        alert("Tutte le coppie di parole sono già uscite! Premi il pulsante di reset per ricominciare.");
+        return;
+      }
+      [civilWord, undercoverWord] = availablePairs[Math.floor(Math.random() * availablePairs.length)];
+      saveUsedPair([civilWord, undercoverWord]);
+      // --- FINE MODIFICA ---
 
       roles = Array(players.length).fill("Civile");
       for (let i = 0; i < numUndercover; i++) roles[i] = "Undercover";
@@ -220,14 +314,10 @@ function renderPlayerList() {
       primoGiocatoreIdx = possibili[Math.floor(Math.random() * possibili.length)];
 
       eliminated = [];
-      renderPlayerList();
-
-      document.getElementById("gameArea").style.display = "block";
-      document.getElementById("playerRoles").style.display = "block";
-      document.getElementById("toggleRolesBtn").textContent = "Nascondi Ruoli";
-      document.getElementById("voteBtn").style.display = "inline-block";
-      document.getElementById("voteArea").style.display = "none";
-      document.getElementById("resultArea").style.display = "none";
+      // Nascondi il form di setup
+      document.getElementById("setupForm").style.display = "none";
+      // Avvia la visualizzazione dei ruoli uno alla volta
+      startRoleReveal();
     });
 
     document.getElementById("toggleRolesBtn").addEventListener("click", function() {
@@ -268,6 +358,30 @@ function renderPlayerList() {
             return;
           }
 
+          // --- AGGIUNTA: Controllo vittoria Undercover ---
+          // Se 2 o più undercover restano con un civile, vincono gli undercover
+          const undercoverCount = inGioco.filter(i => roles[i] === "Undercover").length;
+          const civilCount = inGioco.filter(i => roles[i] === "Civile").length;
+          const misterWhiteCount = inGioco.filter(i => roles[i] === "Mister White").length;
+          if (undercoverCount >= 2 && civilCount === 1 && misterWhiteCount === 0) {
+            document.getElementById("resultArea").innerHTML =
+              "Hanno vinto gli Undercover!<br><br>" +
+              "<b>Parola Civili:</b> " + civilWord + "<br>" +
+              "<b>Parola Undercover:</b> " + undercoverWord;
+            document.getElementById("resultArea").style.display = "block";
+            return;
+          }
+          // Se resta solo un undercover senza civili, vince lui
+          if (undercoverCount === 1 && civilCount === 0 && misterWhiteCount === 0) {
+            document.getElementById("resultArea").innerHTML =
+              "Ha vinto l'Undercover!<br><br>" +
+              "<b>Parola Civili:</b> " + civilWord + "<br>" +
+              "<b>Parola Undercover:</b> " + undercoverWord;
+            document.getElementById("resultArea").style.display = "block";
+            return;
+          }
+          // --- FINE AGGIUNTA ---
+
           const role = roles[idx];
           if (role === "Civile") {
             document.getElementById("resultArea").textContent = "Un civile è stato eliminato.";
@@ -287,9 +401,15 @@ function renderPlayerList() {
             document.getElementById("submitGuess").onclick = function() {
               const guess = document.getElementById("whiteGuess").value.trim().toLowerCase();
               if (guess === civilWord.toLowerCase()) {
-                document.getElementById("resultArea").textContent = "Ha vinto Mr White!";
+                document.getElementById("resultArea").innerHTML = 
+                  "Ha vinto Mr White!<br><br>" +
+                  "<b>Parola Civili:</b> " + civilWord + "<br>" +
+                  "<b>Parola Undercover:</b> " + undercoverWord;
               } else {
-                document.getElementById("resultArea").textContent = "Mister White ha fallito! Il gioco ricomincia.";
+                document.getElementById("resultArea").innerHTML = 
+                  "Mister White ha fallito! Il gioco ricomincia.<br><br>" +
+                  "<b>Parola Civili:</b> " + civilWord + "<br>" +
+                  "<b>Parola Undercover:</b> " + undercoverWord;
                 setTimeout(() => {
                   location.reload();
                 }, 2000);
